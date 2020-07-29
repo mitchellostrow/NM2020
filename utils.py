@@ -305,3 +305,120 @@ def listSlices(start, end, step = 1):
     temp.append(slice(currentStart, Clamp427(currentStart + step, 0, end)))
     currentStart += step
   return temp
+
+
+
+
+def FindNumOfNeurons(dat):
+  """ Given one session, returns the number of neurons in each
+      of the brain regions it records from.
+  Args:
+      dat (dict): contains all recording information from one single session,
+                  including the brain area of each recorded neuron.
+  Return:
+      NN (dict): a dictionary contains all the recorded brain regions in one session
+                 as the key, and number of neurons in each of these regions
+  """
+
+  barea = dat['brain_area']
+  NN = {}
+  for i in range(len(barea)):
+    if barea[i] not in NN:
+      NN[barea[i]] = 0
+    NN[barea[i]] += 1
+  return NN
+
+
+
+def PCAbyTrailGroup(spks, n_component):
+  """ Given dat, perform PCA on its spks
+  Args: 
+      spks
+  Return:
+      W (list, shape(n_component, n_neurons)): 
+      weights of PCs with our specified number of components, 
+  """
+  droll = np.reshape(spks[:,:,51:130], (NN,-1)) # first 80 bins = 1.6 sec
+  droll = droll - np.mean(droll, axis=1)[:, np.newaxis]
+  model = PCA(n_component).fit(droll.T)
+  W = model.components_
+  return W
+
+
+
+def Region_Averaged_PC_weights(W, params):
+  """ Given the weights of all PCs of interest, compute the brain region-averaged 
+      PC weights for each of the PC.
+  Args:
+      W ((n_component, NN) array): weights of PCs of interest
+      params (dict): contains a list of brain area and a list of number of neurons in each area
+  Return:
+      w_by_region ((n_component, num_brain_area) array)
+  """ 
+  barea = params['barea']
+  num_neurons = params['num_neurons']
+  w_by_region = []
+  for PC in W:
+    w_per_PC = []
+    for area in barea:
+      local_neurons = dat['brain_area'] == area 
+      w_per_PC.append(np.sum(local_neurons * PC))
+    for i in range(len(w_per_PC)):
+      w_per_PC[i] /= num_neurons[i]
+    w_by_region.append(w_per_PC)
+  return barea, w_by_region
+
+
+def PCA_HeatMap_by_TrailGroup(dat):
+  """ Given dat, first seperate all trails to correct/incorrect, large/small margin groups,
+      then perform a PCA on each of these four conditions, and produce a heatmap on brain
+      region averaged weights of PC for correct/incorrect, and large/small margin group.
+  Args:
+      dat (dict): one session of recording.
+  Returns:
+      Two groups of heatmaps performed on correct/incorrect trails, and large/small margin 
+      trails, respectively. Each group of heatmap contains 4 seperate heatmaps corresponding 
+      to top 4 PCs sorted by descending variance explained. The Y-axis of each heatmap
+      labels different brain regions in the input session, sorted by descending number of 
+      recorded neurons. The X-axis is different trail groups. 
+  """
+
+  # preprocessing for PCA
+  spks = dat['spks']
+  response = dat['response']
+  vis_left = dat['contrast_left']
+  vis_right = dat['contrast_right']
+  is_correct = np.sign(response)==np.sign(vis_left-vis_right) and response != 0
+  large_margin = np.abs(vis_left - vis_right) > 0.49
+
+  # perform PCA on each of correct/incorrect, large/small margin trails
+  # plotting the variance explained by the top few PCs
+  w_cor = PCAbyTrailGroup(spks[:, is_correct, :], 4)        # PCA on correct trail group
+  w_incor = PCAbyTrailGroup(spks[:, ~is_correct, :], 4)     # PCA on incorrect trail group
+  w_lar_margin = PCAbyTrailGroup(spks[:, large_margin, :], 4)   # PCA on large margin trial group
+  w_smal_margin = PCAbyTrailGroup(spks[:, ~large_margin, :], 4) # PCA on small margin trail group
+
+  # sort both the weights and the barea by descending number of neurons within each region
+  barea_dict = FindNumOfNeurons(dat)
+  barea_keys = list(FindNumOfNeurons(dat).keys())
+  barea = []
+  num_neurons = sorted(FindNumOfNeurons(dat).values(), reverse=True)  # sort the number of neurons
+  for i in range(len(num_neurons)):
+    for j in range(len(barea_keys)):
+      if barea_dict[barea_keys[j]] == num_neurons[i]:
+        barea.append(barea_keys[j])
+  params = {'barea': barea, 'num_neurons': num_neurons}
+
+  # average PC weights by brain regions for each of four trail groups
+  barea_cor, w_cor_aver     =  Region_Averaged_PC_weights(w_cor, params)
+  barea_incor, w_incor_aver =  Region_Averaged_PC_weights(w_incor, params)
+  barea_lar, w_lar_aver     =  Region_Averaged_PC_weights(w_lar_margin, params)
+  barea_smal, w_smal_aver   =  Region_Averaged_PC_weights(w_smal_margin, params)
+
+  # converting region-averaged weights to Heatmap
+  w_cor_incor = np.array([w_cor_aver, w_incor_aver])
+  w_lar_smal_margin = np.array([w_lar_aver, w_smal_aver])
+  x_label_cor = ['correct', 'incorrect']
+  x_label_mar = ['large margin', 'small margin']
+  HeatMapTSegXBrainReg(w_cor_incor, barea, x_label_cor, choice_PC = [0,1,2,3])
+  HeatMapTSegXBrainReg(w_lar_smal_margin, barea, x_label_mar, choice_PC = [0,1,2,3])
