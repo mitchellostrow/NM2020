@@ -259,7 +259,7 @@ def HeatMapTSegXBrainReg(PCperSlice_regions, brain_arr \
   yLen = PCperSlice_regions.shape[2] # y is brain region
   
   #fig, ax = plt.subplots() # create a plot; figsize: WidthxHeight, buggy
-  fig, axs = plt.subplots(1, len(choice_PC) + 1, figsize=(29, 4)) # for 3 regions
+  fig, axs = plt.subplots(1, len(choice_PC), figsize=(26.4, 3)) # for 3 regions
   #fig, axs = plt.subplots(1, len(choice_PC) + 1, figsize=(28, 10)) # all regions
   # do min(4,nPC) components
   for pc in range(len(choice_PC)):
@@ -314,6 +314,7 @@ def listSlices(start, end, step = 1):
     temp.append(slice(currentStart, Clamp427(currentStart + step, 0, end)))
     currentStart += step
   return temp
+
 
 
 
