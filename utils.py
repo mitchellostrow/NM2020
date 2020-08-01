@@ -58,8 +58,8 @@ def smoothDat(dat, kernel = None): # return a deep copy of dat by smoothening it
       dat_['spks'][i, j, :] = np.convolve(dat_['spks'][i, j, :], kernel(x), 'same')
   return dat_
 
-def VarHunter427(dat, time_seg = None, nPC = 4, all_regions = True \
-                 , trial_seg = None, SPCA = False, trial_seg_isBoolMask = False):
+def VarHunter427(dat, time_seg = None, nPC = 4, all_regions = True, regions_str = [] \
+               , trial_seg = None, SPCA = False, trial_seg_isBoolMask = False):
   """ Given a session of data: dat
       print out variance explained using PCA/SparsePCA on spike data by brain sub-regions
   Args:
@@ -72,6 +72,9 @@ def VarHunter427(dat, time_seg = None, nPC = 4, all_regions = True \
     all_regions (bool):
       if True, do PCA on all neurons in that mouse in the session
       then time_seg is a list of slice objects instead of single slice when it is False
+    regions_str (list of strings):
+      if all_regions == True, then we do PCA only on those regions specified by regions_str
+      if regions_str is empty (by default), then we literally do all regions
     trial_seg (nested lists): len(trial_seg) = nSlice
       if not None, then assume all_regions = True, and assume list of single time slice
       if not None, the list inside trial_seg should be indices of trials
@@ -125,6 +128,11 @@ def VarHunter427(dat, time_seg = None, nPC = 4, all_regions = True \
               , list_PC_NN[i][0], ':', str(list_PC_NN[i][1]).ljust(4) \
               , 'total: %.3f' %list_tot[i], 'var explained: ', list_var[i])
   else: # on all regions
+    if len(regions_str) > 0: # if 0, use brain_arr = all regions
+      brain_arr = regions_str
+    rfilter_ = np.isin(dat['brain_area'], brain_arr) # neurosn in all regions in regions_str
+    rSubset = dat['brain_area'][rfilter_] # subset of neurons whose regions show in regions_str
+    nN = len(rSubset) # nN is subset only if regions_str does not contain all regions
     flag_TrialWise = False
     if not trial_seg == None: # assume time_seg is not empty and of single time slice
       nSlice = len(trial_seg)
@@ -148,8 +156,8 @@ def VarHunter427(dat, time_seg = None, nPC = 4, all_regions = True \
     PCperSlice = np.zeros((nSlice, nPC, nN)) # principal axes 3D np.arr (nSlice, nPC, n_features)
     varperSlice = np.zeros((nSlice, nPC)) # variance each PC explained
     for i in range(nSlice):
-      droll = np.reshape(dat['spks'][:,:,time_seg[i]], (nN,-1)) if not flag_TrialWise \
-         else np.reshape(dat['spks'][:,filters_[i],time_seg[0]], (nN,-1))
+      droll = np.reshape(dat['spks'][rfilter_][:,:,time_seg[i]], (nN,-1)) if not flag_TrialWise \
+         else np.reshape(dat['spks'][rfilter_][:,filters_[i],time_seg[0]], (nN,-1))
       droll = droll - np.mean(droll, axis=1)[:, np.newaxis]
       nPC = Clamp427(nPC, 0, min(droll.shape[0],droll.shape[1])) # 0: n_features, 1: n_samples
       model = PCA(n_components = nPC).fit(droll.T) if not SPCA \
@@ -163,8 +171,8 @@ def VarHunter427(dat, time_seg = None, nPC = 4, all_regions = True \
     methodsStr = ['mean', 'sum', 'max', 'std']
     for m in range(len(methods)):
       PCperSlice_regions_ = np.zeros((nSlice, nPC, len(brain_arr)))
-      for i in range(len(brain_arr)): # iterate over all unique brain_areas
-        filter_ = np.isin(dat['brain_area'], [brain_arr[i]])
+      for i in range(len(brain_arr)): # iterate over all unique brain_areas / or those in regions_str only
+        filter_ = np.isin(rSubset, [brain_arr[i]])
         PCperSlice_regions_[:,:,i] = methods[m](PCperSlice[:,:,filter_], axis = 2)
       PCperSlice_regions[methodsStr[m]] = PCperSlice_regions_
     return brain_arr, PCperSlice, PCperSlice_regions, varperSlice
@@ -250,8 +258,9 @@ def HeatMapTSegXBrainReg(PCperSlice_regions, brain_arr \
   xLen = PCperSlice_regions.shape[0] # x is time segment slices
   yLen = PCperSlice_regions.shape[2] # y is brain region
   
-  #fig, ax = plt.subplots() # create a plot
-  fig, axs = plt.subplots(1, len(choice_PC) + 1, figsize=(30, 10))
+  #fig, ax = plt.subplots() # create a plot; figsize: WidthxHeight, buggy
+  fig, axs = plt.subplots(1, len(choice_PC), figsize=(26.4, 3)) # for 3 regions
+  #fig, axs = plt.subplots(1, len(choice_PC) + 1, figsize=(28, 10)) # all regions
   # do min(4,nPC) components
   for pc in range(len(choice_PC)):
     print(PCperSlice_regions.shape)
@@ -306,6 +315,8 @@ def listSlices(start, end, step = 1):
     temp.append(slice(currentStart, Clamp427(currentStart + step, 0, end)))
     currentStart += step
   return temp
+
+
 
 
 
