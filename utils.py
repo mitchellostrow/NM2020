@@ -254,6 +254,7 @@ def HeatMapTSegXBrainReg(PCperSlice_regions, brain_arr \
   fig, axs = plt.subplots(1, len(choice_PC) + 1, figsize=(30, 10))
   # do min(4,nPC) components
   for pc in range(len(choice_PC)):
+    print(PCperSlice_regions.shape)
     theMatrix = PCperSlice_regions[:,choice_PC[pc],:].T # transpose it
     im = axs[pc].imshow(theMatrix)
     # show all ticks & labels
@@ -338,6 +339,7 @@ def PCAbyTrailGroup(spks, n_component):
       W (list, shape(n_component, n_neurons)): 
       weights of PCs with our specified number of components, 
   """
+  NN = len(spks)
   droll = np.reshape(spks[:,:,51:130], (NN,-1)) # first 80 bins = 1.6 sec
   droll = droll - np.mean(droll, axis=1)[:, np.newaxis]
   model = PCA(n_component).fit(droll.T)
@@ -346,7 +348,7 @@ def PCAbyTrailGroup(spks, n_component):
 
 
 
-def Region_Averaged_PC_weights(W, params):
+def Region_Averaged_PC_weights(W, params,dat):
   """ Given the weights of all PCs of interest, compute the brain region-averaged 
       PC weights for each of the PC.
   Args:
@@ -388,7 +390,7 @@ def PCA_HeatMap_by_TrailGroup(dat):
   response = dat['response']
   vis_left = dat['contrast_left']
   vis_right = dat['contrast_right']
-  is_correct = np.sign(response)==np.sign(vis_left-vis_right) and response != 0
+  is_correct = np.logical_and(np.sign(response)==np.sign(vis_left-vis_right), response != 0)
   large_margin = np.abs(vis_left - vis_right) > 0.49
 
   # perform PCA on each of correct/incorrect, large/small margin trails
@@ -410,15 +412,15 @@ def PCA_HeatMap_by_TrailGroup(dat):
   params = {'barea': barea, 'num_neurons': num_neurons}
 
   # average PC weights by brain regions for each of four trail groups
-  barea_cor, w_cor_aver     =  Region_Averaged_PC_weights(w_cor, params)
-  barea_incor, w_incor_aver =  Region_Averaged_PC_weights(w_incor, params)
-  barea_lar, w_lar_aver     =  Region_Averaged_PC_weights(w_lar_margin, params)
-  barea_smal, w_smal_aver   =  Region_Averaged_PC_weights(w_smal_margin, params)
+  barea_cor, w_cor_aver     =  Region_Averaged_PC_weights(w_cor, params, dat)
+  barea_incor, w_incor_aver =  Region_Averaged_PC_weights(w_incor, params, dat)
+  barea_lar, w_lar_aver     =  Region_Averaged_PC_weights(w_lar_margin, params, dat)
+  barea_smal, w_smal_aver   =  Region_Averaged_PC_weights(w_smal_margin, params, dat)
 
   # converting region-averaged weights to Heatmap
   w_cor_incor = np.array([w_cor_aver, w_incor_aver])
   w_lar_smal_margin = np.array([w_lar_aver, w_smal_aver])
   x_label_cor = ['correct', 'incorrect']
   x_label_mar = ['large margin', 'small margin']
-  HeatMapTSegXBrainReg(w_cor_incor, barea, x_label_cor, choice_PC = [0,1,2,3])
-  HeatMapTSegXBrainReg(w_lar_smal_margin, barea, x_label_mar, choice_PC = [0,1,2,3])
+  HeatMapTSegXBrainReg(w_cor_incor, barea, x_label_cor)
+  HeatMapTSegXBrainReg(w_lar_smal_margin, barea, x_label_mar)
